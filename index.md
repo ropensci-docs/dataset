@@ -1,0 +1,207 @@
+# The dataset R Package
+
+# Overview
+
+The `dataset` package extends tidyverse workflows with lightweight
+semantic metadata, provenance tracking, and interoperable dataset
+structures.
+
+It supports gradual semantic stabilization ranging from lightweight
+semantic mappings to formally defined variables and semantically
+enriched datasets suitable for FAIR, machine-readable, and
+standards-aligned data exchange.
+
+The package draws inspiration from:
+
+- **SDMX** and statistical data cube models
+- **Dublin Core** and **DataCite**
+- **FAIR and reproducible research workflows**
+
+The goal is to preserve metadata when reusing statistical and repository
+datasets, improve interoperability, and make it easy to turn tidy data
+frames into web-ready, publishable datasets that comply with ISO and W3C
+standards.
+
+## Installation
+
+You can install the latest released version of **`dataset`** from
+[CRAN](https://cran.r-project.org/package=dataset) with:
+
+``` r
+
+install.packages("dataset")
+```
+
+To install the development version from GitHub with `pak` or `remotes`:
+
+``` r
+
+# install.packages("pak")
+pak::pak("dataobservatory-eu/dataset")
+
+# install.packages("remotes")
+remotes::install_github("dataobservatory-eu/dataset")
+```
+
+## Minimal Example
+
+Real-world datasets rarely begin with fully standardized values. Early
+in a project, inconsistencies may be easy to spot, such as mixing `AD`
+and `Andorra` for the same country. As datasets are combined from
+multiple sources, however, additional variants often appear, for example
+the ISO-3166 alpha-2 code `AD`, the country name `Andorra`, or the
+ISO-3166 alpha-3 code `AND`.
+
+The
+[`prelabel()`](https://docs.ropensci.org/dataset/reference/prelabel.md)
+constructor provides a lightweight way to stabilize such values before
+committing to a formal semantic definition.
+
+``` r
+
+library(dataset)
+
+x <- prelabel(
+  c("AD", "Andorra", "AND", "LI", "Liechtenstein"),
+  labels = c(
+    Andorra = "AD",
+    AND = "AD",
+    Liechtenstein = "LI"
+  )
+)
+
+as.character(x)
+#> [1] "AD" "AD" "AD" "LI" "LI"
+```
+
+Unlike a formal semantic definition, a `prelabelled` vector records
+provisional mappings that may still evolve during data integration. The
+original observational values remain available alongside the current
+semantic assumptions:
+
+``` r
+
+attr(x, "prelabel")
+#>       Andorra           AND Liechtenstein            AD            LI 
+#>          "AD"          "AD"          "LI"          "AD"          "LI"
+```
+
+When semantic assumptions become sufficiently stable, variables can be
+formalized with
+[`defined()`](https://docs.ropensci.org/dataset/reference/defined.md)
+and combined into a semantically enriched
+[`dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+object:
+
+``` r
+
+library(dataset)
+
+df <- dataset_df(
+  country = defined(
+    c("AD", "LI"),
+    label = "Country",
+    namespace = "https://www.geonames.org/countries/$1/"
+  ),
+  gdp = defined(
+    c(3897, 7365),
+    label = "GDP",
+    unit = "million euros"
+  ),
+  dataset_bibentry = dublincore(
+    title = "GDP Dataset",
+    creator = person("Jane", "Doe", role = "aut"),
+    publisher = "Small Repository"
+  )
+)
+
+print(df)
+#> Doe (2026): GDP Dataset [dataset]
+#>   rowid country   gdp 
+#>   <chr> <chr>   <dbl>
+#> 1 obs1  AD       3897
+#> 2 obs2  LI       7365
+```
+
+This illustrates the semantic lifecycle supported by the package:
+
+``` text
+raw values
+    ↓
+prelabelled
+    ↓
+defined
+    ↓
+dataset_df
+    ↓
+RDF and FAIR publication
+```
+
+Because semantic assumptions and provenance are preserved explicitly,
+semantically enriched datasets can be exported as interoperable RDF
+triples without manually reconstructing metadata at publication time.
+
+Export as RDF triples:
+
+``` r
+
+dataset_to_triples(df, format = "nt")
+```
+
+``` R
+#> [1] "<http://example.com/dataset#obsobs1> <http://example.com/prop/country> <https://www.geonames.org/countries/AD/> ."
+#> [2] "<http://example.com/dataset#obsobs2> <http://example.com/prop/country> <https://www.geonames.org/countries/LI/> ."
+#> [3] "<http://example.com/dataset#obsobs1> <http://example.com/prop/gdp> \"3897\"^^<xsd:decimal> ."                     
+#> [4] "<http://example.com/dataset#obsobs2> <http://example.com/prop/gdp> \"7365\"^^<xsd:decimal> ."
+```
+
+Retain automatically recorded provenance:
+
+``` r
+
+provenance(df)
+```
+
+``` R
+#> [1] "<http://example.com/dataset_prov.nt> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Bundle> ."                  
+#> [2] "<http://example.com/dataset#> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Entity> ."                         
+#> [3] "<http://example.com/dataset#> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://purl.org/linked-data/cube#DataSet> ."                 
+#> [4] "_:doejane <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Agent> ."                                              
+#> [5] "<https://doi.org/10.32614/CRAN.package.dataset> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#SoftwareAgent> ."
+#> [6] "<http://example.com/creation> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Activity> ."                       
+#> [7] "<http://example.com/creation> <http://www.w3.org/ns/prov#generatedAtTime> \"2026-06-03T06:29:26Z\"^^<xsd:dateTime> ."
+```
+
+## Contributing
+
+The package does not attempt automatic ontology alignment, entity
+reconciliation, or rule-based semantic inference. It focuses on
+preserving semantic assumptions made by the analyst in a transparent and
+reproducible form.
+
+We welcome contributions and discussion!
+
+- Please see our
+  [CONTRIBUTING.md](https://github.com/ropensci/dataset/blob/main/CONTRIBUTING.md)
+  guide.
+- Ideas, bug reports, and feedback are welcome via [GitHub
+  issues](https://github.com/ropensci/dataset/issues).
+- The design principles and ideas for futher development are explained
+  in [Design Principles & Future Work Semantically Enriched,
+  Standards-Aligned Datasets in
+  R](https://dataset.dataobservatory.eu/articles/design.html).
+
+Please refer to this package as:
+
+Daniel Antal. (2026). *dataset: Create Data Frames that are Easier to
+Exchange and Reuse (0.4.4)*. The Comprehensive R Archive Network.
+<https://zenodo.org/records/17621464>, DOI:
+10.32614/CRAN.package.dataset
+
+See contributors on the website and in the DESCRIPTION file.
+
+## Code of Conduct
+
+This project follows the [rOpenSci Code of
+Conduct](https://ropensci.org/code-of-conduct/). By participating, you
+are expected to uphold these guidelines.

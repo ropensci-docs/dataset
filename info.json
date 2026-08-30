@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "1dabc465edabb0cf3e8bcd2887730439be31e040",
+    "author": "Daniel Antal <antaldaniel@gmail.com>",
+    "time": "2026-06-03T06:49:34Z",
+    "files": 3,
+    "merge": false,
+    "message": "No separate documentation entry for is.prelabelled()\n"
+  },
+  "repo": "https://github.com/ropensci/dataset",
+  "pkg": "dataset",
+  "time": "2026-08-30T07:45:20Z"
+}
