@@ -1,0 +1,436 @@
+# The dataset R Package
+
+# Overview
+
+The `dataset` package extends tidyverse workflows with lightweight
+semantic metadata, provenance tracking, and interoperable dataset
+structures.
+
+It supports gradual semantic stabilization ranging from lightweight
+semantic mappings to formally defined variables and semantically
+enriched datasets suitable for FAIR, machine-readable, and
+standards-aligned data exchange.
+
+The package draws inspiration from:
+
+- **SDMX** and statistical data cube models
+- **Dublin Core** and **DataCite**
+- **FAIR and reproducible research workflows**
+
+The goal is to preserve metadata when reusing statistical and repository
+datasets, improve interoperability, and make it easy to turn tidy data
+frames into web-ready, publishable datasets that comply with ISO and W3C
+standards.
+
+## Installation
+
+You can install the latest released version of **`dataset`** from
+[CRAN](https://cran.r-project.org/package=dataset) with:
+
+``` r
+
+install.packages("dataset")
+```
+
+To install the development version from GitHub with `pak` or `remotes`:
+
+``` r
+
+# install.packages("pak")
+pak::pak("dataobservatory-eu/dataset")
+
+# install.packages("remotes")
+remotes::install_github("dataobservatory-eu/dataset")
+```
+
+## Minimal Example
+
+Real-world datasets rarely begin with fully standardized values. Early
+in a project, inconsistencies may be easy to spot, such as mixing `AD`
+and `Andorra` for the same country. As datasets are combined from
+multiple sources, however, additional variants often appear, for example
+the ISO-3166 alpha-2 code `AD`, the country name `Andorra`, or the
+ISO-3166 alpha-3 code `AND`.
+
+The
+[`prelabel()`](https://docs.ropensci.org/dataset/reference/prelabel.md)
+constructor provides a lightweight way to stabilize such values before
+committing to a formal semantic definition.
+
+``` r
+
+library(dataset)
+
+x <- prelabel(
+  c("AD", "Andorra", "AND", "LI", "Liechtenstein"),
+  labels = c(
+    Andorra = "AD",
+    AND = "AD",
+    Liechtenstein = "LI"
+  )
+)
+
+as.character(x)
+#> [1] "AD" "AD" "AD" "LI" "LI"
+```
+
+Unlike a formal semantic definition, a `prelabelled` vector records
+provisional mappings that may still evolve during data integration. The
+original observational values remain available alongside the current
+semantic assumptions:
+
+``` r
+
+attr(x, "prelabel")
+#>       Andorra           AND Liechtenstein            AD            LI 
+#>          "AD"          "AD"          "LI"          "AD"          "LI"
+```
+
+When semantic assumptions become sufficiently stable, variables can be
+formalized with
+[`defined()`](https://docs.ropensci.org/dataset/reference/defined.md)
+and combined into a semantically enriched
+[`dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+object:
+
+``` r
+
+library(dataset)
+
+df <- dataset_df(
+  country = defined(
+    c("AD", "LI"),
+    label = "Country",
+    namespace = "https://www.geonames.org/countries/$1/"
+  ),
+  gdp = defined(
+    c(3897, 7365),
+    label = "GDP",
+    unit = "million euros"
+  ),
+  dataset_bibentry = dublincore(
+    title = "GDP Dataset",
+    creator = person("Jane", "Doe", role = "aut"),
+    publisher = "Small Repository"
+  )
+)
+
+print(df)
+#> Doe (2026): GDP Dataset [dataset]
+#>   rowid country   gdp 
+#>   <chr> <chr>   <dbl>
+#> 1 obs1  AD       3897
+#> 2 obs2  LI       7365
+```
+
+This illustrates the semantic lifecycle supported by the package:
+
+``` text
+raw values
+    ↓
+prelabelled
+    ↓
+defined
+    ↓
+dataset_df
+    ↓
+RDF and FAIR publication
+```
+
+Because semantic assumptions and provenance are preserved explicitly,
+semantically enriched datasets can be exported as interoperable RDF
+triples without manually reconstructing metadata at publication time.
+
+Export as RDF triples:
+
+``` r
+
+dataset_to_triples(df, format = "nt")
+```
+
+``` R
+#> [1] "<http://example.com/dataset#obsobs1> <http://example.com/prop/country> <https://www.geonames.org/countries/AD/> ."
+#> [2] "<http://example.com/dataset#obsobs2> <http://example.com/prop/country> <https://www.geonames.org/countries/LI/> ."
+#> [3] "<http://example.com/dataset#obsobs1> <http://example.com/prop/gdp> \"3897\"^^<xsd:decimal> ."                     
+#> [4] "<http://example.com/dataset#obsobs2> <http://example.com/prop/gdp> \"7365\"^^<xsd:decimal> ."
+```
+
+Retain automatically recorded provenance:
+
+``` r
+
+provenance(df)
+```
+
+``` R
+#> [1] "<http://example.com/dataset_prov.nt> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Bundle> ."                  
+#> [2] "<http://example.com/dataset#> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Entity> ."                         
+#> [3] "<http://example.com/dataset#> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://purl.org/linked-data/cube#DataSet> ."                 
+#> [4] "_:doejane <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Agent> ."                                              
+#> [5] "<https://doi.org/10.32614/CRAN.package.dataset> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#SoftwareAgent> ."
+#> [6] "<http://example.com/creation> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Activity> ."                       
+#> [7] "<http://example.com/creation> <http://www.w3.org/ns/prov#generatedAtTime> \"2026-06-03T06:29:26Z\"^^<xsd:dateTime> ."
+```
+
+## Contributing
+
+The package does not attempt automatic ontology alignment, entity
+reconciliation, or rule-based semantic inference. It focuses on
+preserving semantic assumptions made by the analyst in a transparent and
+reproducible form.
+
+We welcome contributions and discussion!
+
+- Please see our
+  [CONTRIBUTING.md](https://github.com/ropensci/dataset/blob/main/CONTRIBUTING.md)
+  guide.
+- Ideas, bug reports, and feedback are welcome via [GitHub
+  issues](https://github.com/ropensci/dataset/issues).
+- The design principles and ideas for futher development are explained
+  in [Design Principles & Future Work Semantically Enriched,
+  Standards-Aligned Datasets in
+  R](https://dataset.dataobservatory.eu/articles/design.html).
+
+Please refer to this package as:
+
+Daniel Antal. (2026). *dataset: Create Data Frames that are Easier to
+Exchange and Reuse (0.4.4)*. The Comprehensive R Archive Network.
+<https://zenodo.org/records/17621464>, DOI:
+10.32614/CRAN.package.dataset
+
+See contributors on the website and in the DESCRIPTION file.
+
+## Code of Conduct
+
+This project follows the [rOpenSci Code of
+Conduct](https://ropensci.org/code-of-conduct/). By participating, you
+are expected to uphold these guidelines.
+
+# Package index
+
+## Dataset
+
+Work with DataSet objects that resemble the W3C and SDMX datacube model.
+
+- [`dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  [`as_dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  [`is.dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  [`print(`*`<dataset_df>`*`)`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  [`is_dataset_df()`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  [`names(`*`<dataset_df>`*`)`](https://docs.ropensci.org/dataset/reference/dataset_df.md)
+  :
+
+  Create a new `dataset_df` object
+
+- [`bind_defined_rows()`](https://docs.ropensci.org/dataset/reference/bind_defined_rows.md)
+  : Bind strictly defined rows
+
+- [`as.data.frame(`*`<dataset_df>`*`)`](https://docs.ropensci.org/dataset/reference/as.data.frame.dataset_df.md)
+  :
+
+  Convert a `dataset_df` to a base `data.frame`
+
+- [`as_tibble()`](https://docs.ropensci.org/dataset/reference/as_tibble.dataset_df.md)
+  [`as.tibble.dataset_df()`](https://docs.ropensci.org/dataset/reference/as_tibble.dataset_df.md)
+  :
+
+  Coerce a `dataset_df` to a tibble
+
+## Semantic harmonisation
+
+Lightweight semantic mappings and semantic preprocessing.
+
+- [`prelabel()`](https://docs.ropensci.org/dataset/reference/prelabel.md)
+  [`is.prelabelled()`](https://docs.ropensci.org/dataset/reference/prelabel.md)
+  : Add lightweight semantic mappings to a vector
+- [`as_character(`*`<prelabelled>`*`)`](https://docs.ropensci.org/dataset/reference/as_character.prelabelled.md)
+  : Coerce prelabelled vectors to semantic character workspace
+- [`as_value_key()`](https://docs.ropensci.org/dataset/reference/as_value_key.md)
+  [`invert_value_key()`](https://docs.ropensci.org/dataset/reference/as_value_key.md)
+  : Coerce semantic mappings to canonical key-value form
+
+## Defined
+
+A labelled subclass that retains unit, definition and namespace.
+
+- [`defined()`](https://docs.ropensci.org/dataset/reference/defined.md)
+  [`is.defined()`](https://docs.ropensci.org/dataset/reference/defined.md)
+  [`summary(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/defined.md)
+  : Create a semantically enriched vector with variable-level metadata
+- [`var_label(`*`<defined>`*`)`](https://docs.ropensci.org/dataset/reference/var_label.md)
+  [`label_attribute()`](https://docs.ropensci.org/dataset/reference/var_label.md)
+  [`` `var_label<-`() ``](https://docs.ropensci.org/dataset/reference/var_label.md)
+  [`var_label(`*`<dataset_df>`*`)`](https://docs.ropensci.org/dataset/reference/var_label.md)
+  : Get or Set a Variable Label
+- [`var_labels()`](https://docs.ropensci.org/dataset/reference/var_labels.md)
+  [`` `var_labels<-`() ``](https://docs.ropensci.org/dataset/reference/var_labels.md)
+  : Get or set all variable labels on a dataset
+- [`var_unit()`](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`` `var_unit<-`() ``](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`get_variable_units()`](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`unit_attribute()`](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`get_unit_attribute()`](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`set_unit_attribute()`](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  [`` `unit_attribute<-`() ``](https://docs.ropensci.org/dataset/reference/var_unit.md)
+  : Get or Set a Unit of Measure
+- [`var_concept()`](https://docs.ropensci.org/dataset/reference/var_concept.md)
+  [`` `var_concept<-`() ``](https://docs.ropensci.org/dataset/reference/var_concept.md)
+  : Get / set a concept definition for a vector or a dataset
+- [`var_namespace()`](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`` `var_namespace<-`() ``](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`get_variable_namespaces()`](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`namespace_attribute()`](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`get_namespace_attribute()`](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`set_namespace_attribute()`](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  [`` `namespace_attribute<-`() ``](https://docs.ropensci.org/dataset/reference/var_namespace.md)
+  : Get or Set the Namespace of a Variable
+- [`as_numeric()`](https://docs.ropensci.org/dataset/reference/as_numeric.md)
+  : Coerce a defined vector to numeric
+- [`as_character()`](https://docs.ropensci.org/dataset/reference/as_character.md)
+  [`as.character(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/as_character.md)
+  : Coerce a defined vector to character
+- [`as_factor()`](https://docs.ropensci.org/dataset/reference/as_factor.md)
+  : Coerce a defined vector to a factor
+- [`as_logical()`](https://docs.ropensci.org/dataset/reference/as_logical.md)
+  : Coerce a defined vector to logical
+- [`as.Date(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/as.Date.haven_labelled_defined.md)
+  : Coerce a defined Date vector to a base R Date
+- [`as.POSIXct(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/as.POSIXct.haven_labelled_defined.md)
+  : Coerce a defined POSIXct vector to a base R POSIXct
+- [`print(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/print.haven_labelled_defined.md)
+  : Print a defined (haven_labelled_defined) vector
+- [`strip_defined()`](https://docs.ropensci.org/dataset/reference/strip_defined.md)
+  : Strip the class from a defined vector
+- [`get_variable_concepts()`](https://docs.ropensci.org/dataset/reference/get_variable_concepts.md)
+  : Get concepts for all variables in a dataset_df
+- [`c(`*`<haven_labelled_defined>`*`)`](https://docs.ropensci.org/dataset/reference/c.haven_labelled_defined.md)
+  : Combine defined vectors with metadata checks
+
+## Bibliography functions
+
+Constructors for extended bibentry classes (DataCite / DCTERMS).
+
+- [`bibrecord()`](https://docs.ropensci.org/dataset/reference/bibrecord.md)
+  : Create a Modern Metadata Object Compatible with bibentry
+- [`as_datacite()`](https://docs.ropensci.org/dataset/reference/datacite.md)
+  [`datacite()`](https://docs.ropensci.org/dataset/reference/datacite.md)
+  [`is.datacite()`](https://docs.ropensci.org/dataset/reference/datacite.md)
+  [`print(`*`<datacite>`*`)`](https://docs.ropensci.org/dataset/reference/datacite.md)
+  : Create a Bibentry Object with DataCite Metadata Fields
+- [`as_dublincore()`](https://docs.ropensci.org/dataset/reference/dublincore.md)
+  [`dublincore()`](https://docs.ropensci.org/dataset/reference/dublincore.md)
+  [`is.dublincore()`](https://docs.ropensci.org/dataset/reference/dublincore.md)
+  [`print(`*`<dublincore>`*`)`](https://docs.ropensci.org/dataset/reference/dublincore.md)
+  : Add or Retrieve Dublin Core Metadata
+
+## Bibliography helpers
+
+Helpers to read/update bibliography attributes of dataset_df.
+
+- [`get_bibentry()`](https://docs.ropensci.org/dataset/reference/get_bibentry.md)
+  [`` `set_bibentry<-`() ``](https://docs.ropensci.org/dataset/reference/get_bibentry.md)
+  : Get or set the bibentry
+- [`dataset_title()`](https://docs.ropensci.org/dataset/reference/dataset_title.md)
+  [`` `dataset_title<-`() ``](https://docs.ropensci.org/dataset/reference/dataset_title.md)
+  : Get or Set the Title of a Dataset
+- [`creator()`](https://docs.ropensci.org/dataset/reference/creator.md)
+  [`` `creator<-`() ``](https://docs.ropensci.org/dataset/reference/creator.md)
+  : Get/set the Creator of the object.
+- [`contributor()`](https://docs.ropensci.org/dataset/reference/contributor.md)
+  [`` `contributor<-`() ``](https://docs.ropensci.org/dataset/reference/contributor.md)
+  : Get or set contributors
+- [`language()`](https://docs.ropensci.org/dataset/reference/language.md)
+  [`` `language<-`() ``](https://docs.ropensci.org/dataset/reference/language.md)
+  : Set the Primary Language of a Dataset
+- [`subject()`](https://docs.ropensci.org/dataset/reference/subject.md)
+  [`subject_create()`](https://docs.ropensci.org/dataset/reference/subject.md)
+  [`` `subject<-`() ``](https://docs.ropensci.org/dataset/reference/subject.md)
+  [`is.subject()`](https://docs.ropensci.org/dataset/reference/subject.md)
+  : Create, add, or retrieve a subject
+- [`relation()`](https://docs.ropensci.org/dataset/reference/relation.md)
+  [`` `relation<-`() ``](https://docs.ropensci.org/dataset/reference/relation.md)
+  [`related_create()`](https://docs.ropensci.org/dataset/reference/relation.md)
+  [`is.related()`](https://docs.ropensci.org/dataset/reference/relation.md)
+  [`related_item()`](https://docs.ropensci.org/dataset/reference/relation.md)
+  [`` `related_item<-`() ``](https://docs.ropensci.org/dataset/reference/relation.md)
+  : Add or retrieve related items (DataCite/Dublin Core)
+- [`publication_year()`](https://docs.ropensci.org/dataset/reference/publication_year.md)
+  [`` `publication_year<-`() ``](https://docs.ropensci.org/dataset/reference/publication_year.md)
+  : Get or Set the Publication Year of a Dataset Object
+- [`publisher()`](https://docs.ropensci.org/dataset/reference/publisher.md)
+  [`` `publisher<-`() ``](https://docs.ropensci.org/dataset/reference/publisher.md)
+  : Get or Set the Publisher of a Dataset Object
+- [`dataset_format()`](https://docs.ropensci.org/dataset/reference/dataset_format.md)
+  [`` `dataset_format<-`() ``](https://docs.ropensci.org/dataset/reference/dataset_format.md)
+  : Get or set the technical format of a dataset
+- [`rights()`](https://docs.ropensci.org/dataset/reference/rights.md)
+  [`` `rights<-`() ``](https://docs.ropensci.org/dataset/reference/rights.md)
+  : Get or Set the Rights of a Dataset Object
+- [`identifier()`](https://docs.ropensci.org/dataset/reference/identifier.md)
+  [`` `identifier<-`() ``](https://docs.ropensci.org/dataset/reference/identifier.md)
+  : Get or Set the Identifier of a Dataset or Metadata Record
+- [`description()`](https://docs.ropensci.org/dataset/reference/description.md)
+  [`` `description<-`() ``](https://docs.ropensci.org/dataset/reference/description.md)
+  : Get or set the dataset Description
+- [`geolocation()`](https://docs.ropensci.org/dataset/reference/geolocation.md)
+  [`` `geolocation<-`() ``](https://docs.ropensci.org/dataset/reference/geolocation.md)
+  : Get or Set the Geolocation of a Dataset Object
+
+## RDF Serialisation
+
+Describe data/metadata in RDF.
+
+- [`describe()`](https://docs.ropensci.org/dataset/reference/describe.md)
+  : Describe a dataset in N-Triples format
+- [`provenance()`](https://docs.ropensci.org/dataset/reference/provenance.md)
+  [`` `provenance<-`() ``](https://docs.ropensci.org/dataset/reference/provenance.md)
+  : Get or update provenance information
+- [`xsd_convert()`](https://docs.ropensci.org/dataset/reference/xsd_convert.md)
+  : Convert to XML Schema Definition (XSD) Types
+- [`n_triples()`](https://docs.ropensci.org/dataset/reference/n_triples.md)
+  : Create N-Triples
+- [`n_triple()`](https://docs.ropensci.org/dataset/reference/n_triple.md)
+  : Create an N-Triple
+- [`dataset_to_triples()`](https://docs.ropensci.org/dataset/reference/dataset_to_triples.md)
+  : Dataset to triples (three columns or N-Triples)
+- [`id_to_column()`](https://docs.ropensci.org/dataset/reference/id_to_column.md)
+  : Add Identifier to First Column of a Dataset
+
+## Replication Datasets
+
+Enriched Orange and simple GDP demo datasets.
+
+- [`orange_df`](https://docs.ropensci.org/dataset/reference/orange_df.md)
+  : Growth of Orange Trees
+- [`gdp`](https://docs.ropensci.org/dataset/reference/gdp.md) : A Small
+  GDP Dataset
+
+# Articles
+
+### Introduction
+
+- [An Introduction to the dataset
+  Package](https://docs.ropensci.org/dataset/articles/introduction.md):
+- [Design Principles & Future Work Semantically Enriched,
+  Standards-Aligned Datasets in
+  R](https://docs.ropensci.org/dataset/articles/design.md):
+
+### Core concepts
+
+- [Handling Semantic Ambiguity with prelabelled
+  Vectors](https://docs.ropensci.org/dataset/articles/prelabelled.md):
+- [defined: Semantically Enriched
+  Vectors](https://docs.ropensci.org/dataset/articles/defined.md):
+- [dataset_df: Create Datasets that are Easy to Share Exchange and
+  Extend](https://docs.ropensci.org/dataset/articles/dataset_df.md):
+
+### Metadata & citation
+
+- [Modernising Citation Metadata in R: Introducing
+  \`bibrecord\`](https://docs.ropensci.org/dataset/articles/bibrecord.md):
+
+### Dataset exchanges
+
+- [From R to RDF](https://docs.ropensci.org/dataset/articles/rdf.md):
+- [Example Dataset
+  Definitions](https://docs.ropensci.org/dataset/articles/example-dataset.md):
